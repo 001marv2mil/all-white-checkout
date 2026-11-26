@@ -32,7 +32,7 @@ export const EVENT = {
   kicker: "Good people · Good vibes · Good times",
   tagline: "Atlanta's premier R&B rooftop experience.",
   headliner: "",
-  dateLabel: "Saturday, December 12, 2026",
+  dateLabel: "Sunday, December 13, 2026",
   timeLabel: "5 PM to 9 PM",
   flyerImage: "",
   venue: "SkyLounge at The Glenn Hotel",
