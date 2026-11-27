@@ -88,7 +88,7 @@ export const TIERS: Tier[] = [
   },
   {
     id: "vip",
-    tag: "Priority entry + welcome drink",
+    tag: "Skip the line · VIP lounge · welcome drink on us",
     name: "VIP Lounge",
     priceCents: 10000,
     blurb: "Skip the line, sip in style. The premium way to do the night.",
