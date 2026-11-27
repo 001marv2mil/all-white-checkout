@@ -83,7 +83,7 @@ export const TIERS: Tier[] = [
     priceCents: 5000,
     blurb: "The full All White R&B Night experience. Music, dancing, and the whole vibe.",
     badge: "Most Popular",
-    capacity: 74,
+    capacity: 93,
     sold: 0,
   },
   {
