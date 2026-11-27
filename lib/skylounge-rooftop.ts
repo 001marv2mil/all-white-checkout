@@ -114,7 +114,7 @@ export const TIERS: Tier[] = [
   },
   {
     id: "founder",
-    tag: "Only 3 of these. Take your seat at the DJ table and own the night.",
+    tag: "Only 3 of these. Your seat at the DJ table plus every VIP perk: drink all night, your own photo shoot, skip the line and the VIP lounge.",
     name: "Founder's Seat",
     priceCents: 15000,
     blurb: "The ultimate all-white experience. Reserved seating, premier service, and exclusive perks.",
