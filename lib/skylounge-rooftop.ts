@@ -68,7 +68,7 @@ export function computeFeeCents(subtotalCents: number, ticketCount: number): num
 export const TIERS: Tier[] = [
   {
     id: "earlybird",
-    tag: "Limited release",
+    tag: "The lowest price of the night. Once they're gone, they're gone.",
     name: "Early Bird GA",
     priceCents: 3500,
     blurb: "Limited release. Same great night, lowest price. Once they're gone, they're gone.",
@@ -78,7 +78,7 @@ export const TIERS: Tier[] = [
   },
   {
     id: "ga",
-    tag: "The Pulse Experience",
+    tag: "Your night in all white: rooftop vibes, classics and slow jams.",
     name: "General Admission",
     priceCents: 5000,
     blurb: "The full All White R&B Night experience. Music, dancing, and the whole vibe.",
@@ -88,7 +88,7 @@ export const TIERS: Tier[] = [
   },
   {
     id: "vip",
-    tag: "Skip the line · VIP lounge · welcome drink on us",
+    tag: "Skip the line · sip in the VIP lounge · your first drink is on us.",
     name: "VIP Lounge",
     priceCents: 10000,
     blurb: "Skip the line, sip in style. The premium way to do the night.",
@@ -97,7 +97,7 @@ export const TIERS: Tier[] = [
   },
   {
     id: "founder",
-    tag: "Seat at the DJ table",
+    tag: "Only 3 of these. Take your seat at the DJ table and own the night.",
     name: "Founder's Seat",
     priceCents: 15000,
     blurb: "The ultimate all-white experience. Reserved seating, premier service, and exclusive perks.",
