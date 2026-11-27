@@ -111,6 +111,11 @@ export async function POST(req: Request) {
       success_url: `${SITE_URL}/skylounge-rooftop/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${SITE_URL}/skylounge-rooftop?canceled=1`,
       customer_email: validEmail,
+      // Puts the event on the Stripe payment and emails Stripe's receipt to the buyer.
+      payment_intent_data: {
+        description: `Tickets: ${EVENT.name}, ${EVENT.dateLabel}, ${EVENT.venue}`,
+        receipt_email: validEmail,
+      },
       metadata: {
         event: EVENT_KEY,
         items: JSON.stringify(items),
