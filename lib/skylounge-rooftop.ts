@@ -21,8 +21,8 @@ export interface Tier {
   badge?: string;
   /** Manual close switch. */
   soldOut?: boolean;
-  /** Total tickets in this tier. */
-  capacity: number;
+  /** Total tickets in this tier. null = no limit. */
+  capacity: number | null;
   /** Tickets already sold OUTSIDE this system (they are not in the database).
    *  Tickets sold through this checkout are counted live from the database. */
   sold: number;
@@ -83,7 +83,7 @@ export const TIERS: Tier[] = [
     priceCents: 5000,
     blurb: "The full All White R&B Night experience. Music, dancing, and the whole vibe.",
     badge: "Most Popular",
-    capacity: 93,
+    capacity: null,
     sold: 0,
   },
   {
@@ -92,7 +92,7 @@ export const TIERS: Tier[] = [
     name: "VIP Lounge",
     priceCents: 10000,
     blurb: "Skip the line, sip in style. The premium way to do the night.",
-    capacity: 18,
+    capacity: null,
     sold: 0,
   },
   {
@@ -103,7 +103,7 @@ export const TIERS: Tier[] = [
     blurb: "The ultimate all-white experience. Reserved seating, premier service, and exclusive perks.",
     badge: "Premium",
     capacity: 3,
-    sold: 0,
+    sold: 1, // one seat taken outside the site (confirmed by the owner)
   },
 ];
 
@@ -111,7 +111,7 @@ export const LOW_STOCK_THRESHOLD = 25;
 
 /** Static remaining count (capacity minus out-of-system sales). Live counts come from the database. */
 export function tierRemaining(tier: Tier): number {
-  return Math.max(0, tier.capacity - tier.sold);
+  return tier.capacity === null ? Infinity : Math.max(0, tier.capacity - tier.sold);
 }
 
 export function isOnSale(): boolean {

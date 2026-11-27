@@ -141,7 +141,6 @@ function Checkout() {
 
   const remainingFor = (tier: Tier) => live?.[tier.id] ?? tierRemaining(tier);
   const openTiers = TIERS.filter((t) => !t.soldOut && remainingFor(t) > 0);
-  const totalLeft = openTiers.reduce((sum, t) => sum + remainingFor(t), 0);
   const fromLabel = openTiers.length ? shortPrice(Math.min(...openTiers.map((t) => t.priceCents))) : null;
 
   // Fall back to the first open tier if the selected one has sold out.
@@ -191,8 +190,6 @@ function Checkout() {
       <Arrow size={18} />
     </button>
   );
-
-  const scarcity = fromLabel ? `🔥 Only ${totalLeft} tickets left in total` : "Sold out";
 
   return (
     <div className="atl">
@@ -295,7 +292,6 @@ function Checkout() {
             {fromLabel ? `Starting at ${fromLabel}` : "Sold out"} <span className="dot">·</span> Instant e-tickets{" "}
             <span className="dot">·</span> Apple / Google Pay
           </p>
-          <p className="cta-caption scarcity">{scarcity}</p>
         </section>
 
         <hr className="divider" />
@@ -391,8 +387,6 @@ function Checkout() {
             </button>
           </div>
           <h3 className="sheet-title">Get your tickets</h3>
-          <p className="cta-caption scarcity">{scarcity}</p>
-
           <div className="sheet-body">
             <div className="tier-list">
               {TIERS.map((tier) => {

@@ -53,7 +53,7 @@ export async function getAvailability(): Promise<Record<TierId, TierAvailability
     out[tier.id] = {
       capacity: tier.capacity,
       sold: total,
-      remaining: closed ? 0 : Math.max(0, tier.capacity - total),
+      remaining: closed ? 0 : tier.capacity === null ? null : Math.max(0, tier.capacity - total),
     };
   }
   return out;
