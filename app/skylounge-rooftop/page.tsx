@@ -449,9 +449,6 @@ function SkyloungeRooftopCheckout() {
                 const soldOut = soldOutFor(tier);
                 const lowStock = remaining !== null && remaining > 0 && remaining <= LOW_STOCK_THRESHOLD;
                 const effectiveMax = remaining === null ? MAX_PER_TIER : Math.min(MAX_PER_TIER, remaining);
-                const pctClaimed = tier.capacity
-                  ? Math.min(100, Math.round(((tier.capacity - (remaining ?? 0)) / tier.capacity) * 100))
-                  : 0;
                 return (
                   <div
                     key={tier.id}
@@ -480,10 +477,8 @@ function SkyloungeRooftopCheckout() {
                         </div>
                         <p className="text-[#F0D488] font-bold mt-0.5">{formatPrice(tier.priceCents)}</p>
                         <p className="text-white/45 text-xs mt-1">{tier.blurb}</p>
-                        {remaining !== null && !soldOut && (
-                          <p className={`text-[11px] font-bold mt-1.5 ${lowStock ? "text-[#ff7a7a]" : "text-white/40"}`}>
-                            {lowStock ? `🔥 Only ${remaining} left` : `${pctClaimed}% claimed`}
-                          </p>
+                        {lowStock && !soldOut && (
+                          <p className="text-[11px] font-bold mt-1.5 text-[#ff7a7a]">🔥 Only {remaining} left</p>
                         )}
                       </div>
 
