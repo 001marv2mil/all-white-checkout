@@ -7,9 +7,10 @@ import {
   TIERS,
   FEES,
   FAQ,
-  MAX_PER_TIER,
   VIP_SECTION,
+  admitsOf,
   computeFeeCents,
+  maxPerOrderOf,
   tierRemaining,
   type Tier,
   type TierId,
@@ -61,7 +62,7 @@ function Checkout() {
   const canceled = useSearchParams().get("canceled") === "1";
 
   const [live, setLive] = useState<Partial<Record<TierId, number>> | null>(null);
-  const [tierId, setTierId] = useState<TierId>("ga");
+  const [tierId, setTierId] = useState<TierId>("vip");
   const [qty, setQty] = useState(1);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -145,10 +146,11 @@ function Checkout() {
 
   // Fall back to the first open tier if the selected one has sold out.
   const selected = openTiers.find((t) => t.id === tierId) ?? openTiers[0] ?? null;
-  const maxQty = selected ? Math.min(MAX_PER_TIER, remainingFor(selected)) : 1;
+  const maxQty = selected ? Math.min(maxPerOrderOf(selected), remainingFor(selected)) : 1;
   const count = Math.max(1, Math.min(qty, maxQty));
   const subtotal = selected ? selected.priceCents * count : 0;
-  const fee = selected ? computeFeeCents(subtotal, count) : 0;
+  const seats = selected ? count * admitsOf(selected) : 1;
+  const fee = selected ? computeFeeCents(subtotal, seats) : 0;
 
   const toggleMusic = () => {
     const next = !playing;
@@ -171,7 +173,7 @@ function Checkout() {
           items: [{ id: selected.id, qty: count }],
           email: email.trim(),
           name: name.trim(),
-          guestNames: Array.from({ length: count - 1 }, (_, i) => (guests[i] ?? "").trim()),
+          guestNames: Array.from({ length: seats - 1 }, (_, i) => (guests[i] ?? "").trim()),
           newsletterOptIn: optIn,
         }),
       });
@@ -397,7 +399,10 @@ function Checkout() {
                     <input type="radio" name="tier" value={tier.id} checked={checked} disabled={soldOut} onChange={() => setTierId(tier.id)} />
                     <span className="tier-radio" />
                     <span className="tier-text">
-                      <span className="tier-name">{tier.name}</span>
+                      <span className="tier-name">
+                        {tier.name}
+                        {tier.badge && !soldOut && <span className="tier-badge">{tier.badge}</span>}
+                      </span>
                       <span className="tier-tag">{soldOut ? "Sold out" : tier.tag}</span>
                       {!soldOut && remainingFor(tier) <= 5 && <span className="tier-low">🔥 Only {remainingFor(tier)} left</span>}
                     </span>
@@ -454,7 +459,7 @@ function Checkout() {
               <span>Your name</span>
               <input ref={nameRef} type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="First & last name" autoComplete="name" maxLength={40} />
             </label>
-            {Array.from({ length: count - 1 }, (_, i) => (
+            {Array.from({ length: seats - 1 }, (_, i) => (
               <label key={i} className="field">
                 <span>Guest {i + 2} name (optional)</span>
                 <input

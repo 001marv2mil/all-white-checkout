@@ -16,7 +16,7 @@ export const SITE_URL = resolveSiteUrl();
 
 /** Tickets sold per tier, straight from the database. */
 export async function getSoldCounts(): Promise<Record<TierId, number>> {
-  const counts: Record<TierId, number> = { earlybird: 0, ga: 0, vip: 0, founder: 0 };
+  const counts: Record<TierId, number> = { earlybird: 0, ga: 0, vip: 0, vip4: 0, founder: 0 };
   const db = getSupabaseAdmin();
 
   // One exact head-count per tier. (A plain select() is capped at 1000 rows by

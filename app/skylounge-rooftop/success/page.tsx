@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import Stripe from "stripe";
-import { EVENT, MAX_PER_TIER, formatPrice, getTier } from "@/lib/skylounge-rooftop";
+import { EVENT, admitsOf, formatPrice, getTier, maxPerOrderOf } from "@/lib/skylounge-rooftop";
 import { issueTicketsForSession } from "@/lib/skylounge-issue-tickets";
 import { maskEmail } from "@/lib/skylounge-ticketing";
 
@@ -48,8 +48,9 @@ function countTickets(rawItems: string | undefined): number {
   let total = 0;
   for (const item of items) {
     const entry = item as { id?: unknown; qty?: unknown } | null;
-    if (!entry || !getTier(String(entry.id))) continue;
-    total += Math.max(1, Math.min(MAX_PER_TIER, Math.floor(Number(entry.qty)) || 1));
+    const tier = entry ? getTier(String(entry.id)) : undefined;
+    if (!entry || !tier) continue;
+    total += admitsOf(tier) * Math.max(1, Math.min(maxPerOrderOf(tier), Math.floor(Number(entry.qty)) || 1));
   }
   return total;
 }

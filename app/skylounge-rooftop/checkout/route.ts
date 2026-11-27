@@ -5,9 +5,11 @@ import {
   EVENT_KEY,
   FEES,
   MAX_PER_TIER,
+  admitsOf,
   computeFeeCents,
   getTier,
   isOnSale,
+  maxPerOrderOf,
 } from "@/lib/skylounge-rooftop";
 import { SITE_URL, getAvailability } from "@/lib/skylounge-ticketing";
 
@@ -60,7 +62,7 @@ export async function POST(req: Request) {
   for (const [id, qty] of wanted) {
     const tier = getTier(id);
     if (!tier || !(tier.priceCents > 0)) return fail("Invalid ticket selection.", 400);
-    if (qty > MAX_PER_TIER) return fail(`You can buy up to ${MAX_PER_TIER} of each ticket type.`, 400);
+    if (qty > maxPerOrderOf(tier)) return fail(`You can buy up to ${maxPerOrderOf(tier)} of ${tier.name} per order.`, 400);
 
     const remaining = availability[tier.id].remaining;
     if (remaining !== null && remaining <= 0) return fail(`${tier.name} is sold out.`, 409);
@@ -70,7 +72,7 @@ export async function POST(req: Request) {
 
     items.push({ id: tier.id, qty });
     subtotalCents += tier.priceCents * qty;
-    ticketCount += qty;
+    ticketCount += qty * admitsOf(tier);
     lineItems.push({
       quantity: qty,
       price_data: {

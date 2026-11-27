@@ -13,7 +13,7 @@
 import Stripe from "stripe";
 import { Resend } from "resend";
 import { getSupabaseAdmin } from "./supabase";
-import { EVENT, EVENT_KEY, MAX_PER_TIER, getTier, type TierId } from "./skylounge-rooftop";
+import { EVENT, EVENT_KEY, admitsOf, getTier, maxPerOrderOf, type TierId } from "./skylounge-rooftop";
 import { SITE_URL, generateTicketCode, ticketQrUrl, ticketUrl } from "./skylounge-ticketing";
 
 export interface IssueResult {
@@ -110,13 +110,15 @@ async function issue(sessionId: string): Promise<IssueResult> {
   for (const item of items) {
     const tier = getTier(String(item?.id));
     if (!tier) continue;
-    const qty = Math.max(1, Math.min(MAX_PER_TIER, Math.floor(Number(item.qty)) || 1));
-    for (let i = 0; i < qty; i++) {
+    const qty = Math.max(1, Math.min(maxPerOrderOf(tier), Math.floor(Number(item.qty)) || 1));
+    // A pack mints one ticket per person, recorded as the underlying tier.
+    const ticketTier = getTier(tier.issuesAs ?? tier.id) ?? tier;
+    for (let i = 0; i < qty * admitsOf(tier); i++) {
       const guestName = seat === 0 ? buyerName : guestNames[seat - 1] || null;
       tickets.push({
         code: generateTicketCode(),
-        tier: tier.id,
-        tierName: tier.name.trim() || "Ticket",
+        tier: ticketTier.id,
+        tierName: ticketTier.name.trim() || "Ticket",
         guestName,
       });
       seat++;

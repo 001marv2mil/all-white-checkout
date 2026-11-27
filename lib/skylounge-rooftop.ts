@@ -5,7 +5,7 @@
 /** Stamped on every Stripe session so ticket issuance ignores payments from other sites. */
 export const EVENT_KEY = "skylounge-rooftop";
 
-export type TierId = "earlybird" | "ga" | "vip" | "founder";
+export type TierId = "earlybird" | "ga" | "vip" | "vip4" | "founder";
 
 /** on-sale = checkout open. Set to "sold-out" or "canceled" to close sales. */
 export type EventStatus = "on-sale" | "sold-out" | "canceled";
@@ -19,6 +19,12 @@ export interface Tier {
   /** Short line under the tier name in the ticket sheet. */
   tag: string;
   badge?: string;
+  /** People admitted per purchase (a 4-pack is 4). Default 1. */
+  admits?: number;
+  /** Tier written on the tickets, if different (4-pack tickets are VIP tickets). */
+  issuesAs?: TierId;
+  /** Per-order limit; defaults to MAX_PER_TIER. */
+  maxPerOrder?: number;
   /** Manual close switch. */
   soldOut?: boolean;
   /** Total tickets in this tier. null = no limit. */
@@ -68,32 +74,43 @@ export function computeFeeCents(subtotalCents: number, ticketCount: number): num
 export const TIERS: Tier[] = [
   {
     id: "earlybird",
-    tag: "The lowest price of the night. Once they're gone, they're gone.",
+    tag: "Lowest price of the night, first drink included. Once they're gone, they're gone.",
     name: "Early Bird GA",
     priceCents: 3500,
     blurb: "Limited release. Same great night, lowest price. Once they're gone, they're gone.",
-    badge: "Limited",
     capacity: 3,
     sold: 0,
   },
   {
     id: "ga",
-    tag: "Your night in all white: rooftop vibes, classics and slow jams.",
+    tag: "Your first drink is on us. Rooftop, R&B and all-white vibes.",
     name: "General Admission",
     priceCents: 5000,
     blurb: "The full All White R&B Night experience. Music, dancing, and the whole vibe.",
-    badge: "Most Popular",
     capacity: null,
     sold: 0,
   },
   {
     id: "vip",
-    tag: "Skip the line · sip in the VIP lounge · your first drink is on us.",
+    tag: "Drink all night. Your own photo shoot. Skip the line. Live it up in the VIP lounge.",
     name: "VIP Lounge",
     priceCents: 10000,
     blurb: "Skip the line, sip in style. The premium way to do the night.",
+    badge: "Best Value",
     capacity: null,
     sold: 0,
+  },
+  {
+    id: "vip4",
+    tag: "4 VIP tickets for your crew: all the VIP perks, and you save $40.",
+    name: "VIP 4-Pack",
+    priceCents: 36000,
+    blurb: "Four VIP tickets at one price.",
+    capacity: null,
+    sold: 0,
+    admits: 4,
+    issuesAs: "vip",
+    maxPerOrder: 2,
   },
   {
     id: "founder",
@@ -101,7 +118,6 @@ export const TIERS: Tier[] = [
     name: "Founder's Seat",
     priceCents: 15000,
     blurb: "The ultimate all-white experience. Reserved seating, premier service, and exclusive perks.",
-    badge: "Premium",
     capacity: 3,
     sold: 1, // one seat taken outside the site (confirmed by the owner)
   },
@@ -157,6 +173,9 @@ export const VIP_SECTION = {
 export function getTier(id: string): Tier | undefined {
   return TIERS.find((t) => t.id === id);
 }
+
+export const admitsOf = (tier: Tier): number => tier.admits ?? 1;
+export const maxPerOrderOf = (tier: Tier): number => tier.maxPerOrder ?? MAX_PER_TIER;
 
 export function formatPrice(cents: number): string {
   return new Intl.NumberFormat("en-US", {

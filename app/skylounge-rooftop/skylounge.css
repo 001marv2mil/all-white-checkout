@@ -950,3 +950,4 @@ body:has(.atl) { background: #0a0705; }
 .atl .tier-list + .summary, .atl .tier-list + .field { margin-top: 18px; }
 
 .atl .tier-low { color: #ff7a7a; font-size: 11.5px; font-weight: 800; }
+.atl .tier-name .tier-badge { display: inline-block; margin-left: 8px; vertical-align: 2px; }
