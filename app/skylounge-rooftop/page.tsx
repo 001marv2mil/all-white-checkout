@@ -405,6 +405,7 @@ function Checkout() {
                     <span className="tier-text">
                       <span className="tier-name">{tier.name}</span>
                       <span className="tier-tag">{soldOut ? "Sold out" : tier.tag}</span>
+                      {!soldOut && remainingFor(tier) <= 5 && <span className="tier-low">🔥 Only {remainingFor(tier)} left</span>}
                     </span>
                     <span className="tier-price">{shortPrice(tier.priceCents)}</span>
                   </label>

@@ -73,7 +73,7 @@ export const TIERS: Tier[] = [
     priceCents: 3500,
     blurb: "Limited release. Same great night, lowest price. Once they're gone, they're gone.",
     badge: "Limited",
-    capacity: 30,
+    capacity: 3,
     sold: 0,
   },
   {
