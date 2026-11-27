@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { PixelPageView, track } from "./MetaPixel";
 import {
   EVENT,
   TIERS,
@@ -165,6 +166,7 @@ function Checkout() {
     if (!emailRef.current?.checkValidity() || !email.trim()) return emailRef.current?.focus();
     setLoading(true);
     setError(null);
+    track("InitiateCheckout", { value: (subtotal + fee) / 100, currency: "USD", num_items: seats });
     try {
       const res = await fetch("/skylounge-rooftop/checkout", {
         method: "POST",
@@ -196,6 +198,7 @@ function Checkout() {
   return (
     <div className="atl">
       <div className="grain" />
+      <PixelPageView />
 
       <button className={`sticky-cta${sticky ? " show" : ""}`} type="button" onClick={() => setSheetOpen(true)}>
         <span>Get Tickets</span>
@@ -368,6 +371,9 @@ function Checkout() {
             <Mark height={18} />
             An event by Atlanta Pulse
           </span>
+          <a className="back-link" href="/privacy">
+            Privacy Policy
+          </a>
         </footer>
       </main>
 

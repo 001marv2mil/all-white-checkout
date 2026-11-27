@@ -5,6 +5,7 @@ import Stripe from "stripe";
 import { EVENT, admitsOf, formatPrice, getTier, maxPerOrderOf } from "@/lib/skylounge-rooftop";
 import { issueTicketsForSession } from "@/lib/skylounge-issue-tickets";
 import { maskEmail } from "@/lib/skylounge-ticketing";
+import { PixelPurchase } from "../MetaPixel";
 
 export const dynamic = "force-dynamic";
 
@@ -129,6 +130,9 @@ export default async function SuccessPage({
     const plural = outcome.ticketCount > 1;
     return (
       <Shell>
+        {outcome.amountTotal !== null && outcome.amountTotal > 0 && (
+          <PixelPurchase orderId={sessionId} value={outcome.amountTotal / 100} />
+        )}
         <div className="w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center" style={{ backgroundImage: "linear-gradient(135deg, #F0D488, #D4AF37)" }}>
           <svg
             className="w-8 h-8 text-[#1a1208]"
