@@ -8,6 +8,7 @@ import {
   FEES,
   FAQ,
   MAX_PER_TIER,
+  LOW_STOCK_THRESHOLD,
   VIP_SECTION,
   computeFeeCents,
   tierRemaining,
@@ -61,8 +62,7 @@ function Checkout() {
   const canceled = useSearchParams().get("canceled") === "1";
 
   const [live, setLive] = useState<Partial<Record<TierId, number>> | null>(null);
-  const [tierId, setTierId] = useState<TierId>("ga");
-  const [qty, setQty] = useState(1);
+  const [qty, setQty] = useState<Record<TierId, number>>({ earlybird: 0, ga: 0, vip: 0, founder: 0 });
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [guests, setGuests] = useState<string[]>([]);
@@ -144,13 +144,13 @@ function Checkout() {
   const totalLeft = openTiers.reduce((sum, t) => sum + remainingFor(t), 0);
   const fromLabel = openTiers.length ? shortPrice(Math.min(...openTiers.map((t) => t.priceCents))) : null;
 
-  // Fall back to the first open tier if the selected one has sold out.
-  const selected = openTiers.find((t) => t.id === tierId) ?? openTiers[0] ?? null;
-  const maxQty = selected ? Math.min(MAX_PER_TIER, remainingFor(selected)) : 1;
-  const count = Math.max(1, Math.min(qty, maxQty));
-  const subtotal = selected ? selected.priceCents * count : 0;
-  const fee = selected ? computeFeeCents(subtotal, count) : 0;
-
+  const maxFor = (tier: Tier) => (tier.soldOut ? 0 : Math.max(0, Math.min(MAX_PER_TIER, remainingFor(tier))));
+  const lines = TIERS.map((tier) => ({ tier, count: Math.min(qty[tier.id], maxFor(tier)) })).filter((l) => l.count > 0);
+  const totalTickets = lines.reduce((sum, l) => sum + l.count, 0);
+  const subtotal = lines.reduce((sum, l) => sum + l.tier.priceCents * l.count, 0);
+  const fee = computeFeeCents(subtotal, totalTickets);
+  // The server stores up to this many guest names per order.
+  const guestFields = Math.max(0, Math.min(totalTickets - 1, MAX_PER_TIER - 1));
   const toggleMusic = () => {
     const next = !playing;
     setPlaying(next);
@@ -159,7 +159,7 @@ function Checkout() {
   };
 
   const pay = async () => {
-    if (!selected) return;
+    if (totalTickets === 0) return;
     if (!name.trim()) return nameRef.current?.focus();
     if (!emailRef.current?.checkValidity() || !email.trim()) return emailRef.current?.focus();
     setLoading(true);
@@ -169,10 +169,10 @@ function Checkout() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items: [{ id: selected.id, qty: count }],
+          items: lines.map((l) => ({ id: l.tier.id, qty: l.count })),
           email: email.trim(),
           name: name.trim(),
-          guestNames: Array.from({ length: count - 1 }, (_, i) => (guests[i] ?? "").trim()),
+          guestNames: Array.from({ length: guestFields }, (_, i) => (guests[i] ?? "").trim()),
           newsletterOptIn: optIn,
         }),
       });
@@ -396,50 +396,56 @@ function Checkout() {
           <div className="sheet-body">
             <div className="tier-list">
               {TIERS.map((tier) => {
-                const soldOut = !openTiers.includes(tier);
-                const checked = selected?.id === tier.id;
+                const max = maxFor(tier);
+                const count = Math.min(qty[tier.id], max);
+                const remaining = remainingFor(tier);
+                const soldOut = max === 0;
+                const lowStock = !soldOut && remaining <= LOW_STOCK_THRESHOLD;
                 return (
-                  <label key={tier.id} className={`tier-option${soldOut ? " soldout" : ""}${checked ? " selected" : ""}`}>
-                    <input type="radio" name="tier" value={tier.id} checked={checked} disabled={soldOut} onChange={() => setTierId(tier.id)} />
-                    <span className="tier-radio" />
-                    <span className="tier-text">
-                      <span className="tier-name">{tier.name}</span>
-                      <span className="tier-tag">{soldOut ? "Sold out" : tier.tag}</span>
-                    </span>
-                    <span className="tier-price">{shortPrice(tier.priceCents)}</span>
-                  </label>
+                  <div key={tier.id} className={`tier-card${soldOut ? " soldout" : ""}${count > 0 ? " selected" : ""}`}>
+                    <div className="tier-card-text">
+                      <div className="tier-card-head">
+                        <span className="tier-card-name">{tier.name}</span>
+                        {tier.badge && <span className="tier-badge">{tier.badge}</span>}
+                      </div>
+                      <p className="tier-card-price">{shortPrice(tier.priceCents)}</p>
+                      <p className="tier-card-blurb">{tier.blurb}</p>
+                      {lowStock && <p className="tier-card-low">🔥 Only {remaining} left</p>}
+                    </div>
+                    {soldOut ? (
+                      <span className="tier-card-soldout">Sold out</span>
+                    ) : (
+                      <div className="stepper">
+                        <button className="step-btn" type="button" aria-label={`Remove one ${tier.name} ticket`} disabled={count === 0} onClick={() => setQty((q) => ({ ...q, [tier.id]: count - 1 }))}>
+                          −
+                        </button>
+                        <span className="qty-value">{count}</span>
+                        <button className="step-btn" type="button" aria-label={`Add one ${tier.name} ticket`} disabled={count >= max} onClick={() => setQty((q) => ({ ...q, [tier.id]: count + 1 }))}>
+                          +
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
 
-            <div className="qty-row">
-              <span className="qty-label">Quantity</span>
-              <div className="stepper">
-                <button className="step-btn" type="button" aria-label="Decrease quantity" disabled={count <= 1} onClick={() => setQty(count - 1)}>
-                  −
-                </button>
-                <span className="qty-value">{count}</span>
-                <button className="step-btn" type="button" aria-label="Increase quantity" disabled={count >= maxQty} onClick={() => setQty(count + 1)}>
-                  +
-                </button>
+            {totalTickets > 0 && (
+              <div className="summary">
+                <div className="summary-row">
+                  <span>Subtotal</span>
+                  <span>{money(subtotal)}</span>
+                </div>
+                <div className="summary-row">
+                  <span>{FEES.label}</span>
+                  <span>{money(fee)}</span>
+                </div>
+                <div className="summary-row total">
+                  <span>Total</span>
+                  <span>{money(subtotal + fee)}</span>
+                </div>
               </div>
-            </div>
-
-            <div className="summary">
-              <div className="summary-row">
-                <span>Subtotal</span>
-                <span>{money(subtotal)}</span>
-              </div>
-              <div className="summary-row">
-                <span>{FEES.label}</span>
-                <span>{money(fee)}</span>
-              </div>
-              <div className="summary-row total">
-                <span>Total</span>
-                <span>{money(subtotal + fee)}</span>
-              </div>
-            </div>
-
+            )}
             {VIP_SECTION.enabled && (
               <div className="vip-note">
                 <p>
@@ -459,7 +465,7 @@ function Checkout() {
               <span>Your name</span>
               <input ref={nameRef} type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="First & last name" autoComplete="name" maxLength={40} />
             </label>
-            {Array.from({ length: count - 1 }, (_, i) => (
+            {Array.from({ length: guestFields }, (_, i) => (
               <label key={i} className="field">
                 <span>Guest {i + 2} name (optional)</span>
                 <input
@@ -499,8 +505,8 @@ function Checkout() {
 
             {error && <p className="form-error">{error}</p>}
 
-            <button className="checkout-submit" type="button" disabled={!selected || loading} onClick={() => void pay()}>
-              {loading ? "Redirecting to secure checkout…" : selected ? `Pay ${money(subtotal + fee)}` : "Sold out"}
+            <button className="checkout-submit" type="button" disabled={totalTickets === 0 || loading} onClick={() => void pay()}>
+              {loading ? "Redirecting to secure checkout…" : totalTickets > 0 ? `Pay ${money(subtotal + fee)}` : fromLabel ? "Select tickets" : "Sold out"}
             </button>
             <p className="secure-note">Secure checkout · Instant e-tickets · No hidden fees</p>
           </div>

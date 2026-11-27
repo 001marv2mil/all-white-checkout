@@ -147,12 +147,12 @@ export const FAQ: { q: string; a: string }[] = [
 
 /** VIP sections are booked by text, not through checkout. */
 export const VIP_SECTION = {
-  enabled: true,
+  enabled: false,
   price: "$600",
   description:
     "8–12 people · $600 flat · includes a $200 hosted bar tab, a dedicated cocktail server, priority check-in, and a private photo set.",
   scarcity: "Only 3 sections available, booked directly by text, not through online checkout.",
-  contacts: [{ label: "Text Jeff or Marty", phone: "+18134443301" }],
+  contacts: [] as { label: string; phone: string }[],
 };
 export function getTier(id: string): Tier | undefined {
   return TIERS.find((t) => t.id === id);
