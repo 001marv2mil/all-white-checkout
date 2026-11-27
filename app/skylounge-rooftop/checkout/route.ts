@@ -23,7 +23,7 @@ export async function POST(req: Request) {
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey) return fail("Checkout is not configured yet.", 503);
 
-  let body: { items?: unknown };
+  let body: { items?: unknown; email?: unknown; name?: unknown; guestNames?: unknown; newsletterOptIn?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -93,6 +93,13 @@ export async function POST(req: Request) {
     });
   }
 
+  // Stripe caps each metadata value at 500 characters, so names are kept short.
+  const clip = (v: unknown) => (typeof v === "string" ? v.trim().slice(0, 40) : "");
+  const buyerName = clip(body.name);
+  const guestNames = Array.isArray(body.guestNames) ? body.guestNames.slice(0, MAX_PER_TIER - 1).map(clip) : [];
+  const email = typeof body.email === "string" ? body.email.trim() : "";
+  const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : undefined;
+
   try {
     const stripe = new Stripe(secretKey, { maxNetworkRetries: 2 });
     const session = await stripe.checkout.sessions.create({
@@ -101,7 +108,14 @@ export async function POST(req: Request) {
       allow_promotion_codes: true,
       success_url: `${SITE_URL}/skylounge-rooftop/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${SITE_URL}/skylounge-rooftop?canceled=1`,
-      metadata: { event: EVENT_KEY, items: JSON.stringify(items) },
+      customer_email: validEmail,
+      metadata: {
+        event: EVENT_KEY,
+        items: JSON.stringify(items),
+        buyerName,
+        guestNames: JSON.stringify(guestNames),
+        newsletterOptIn: body.newsletterOptIn === true ? "true" : "false",
+      },
     });
     if (!session.url) return fail("Could not start checkout. Please try again.", 502);
     return NextResponse.json({ url: session.url });

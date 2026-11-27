@@ -1,60 +1,84 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { motion } from "framer-motion";
 import {
   EVENT,
   TIERS,
   FEES,
   FAQ,
   MAX_PER_TIER,
-  LOW_STOCK_THRESHOLD,
+  VIP_SECTION,
   computeFeeCents,
   tierRemaining,
-  formatPrice,
   type Tier,
   type TierId,
 } from "@/lib/skylounge-rooftop";
 
-const SCRIPT = { fontFamily: "var(--font-script)" } as const;
-const DISPLAY = { fontFamily: "var(--font-display)" } as const;
+const VIDEO_ID = "muPO1c6pxXg";
+const VIDEO_START_SECONDS = 44;
 
-const MAP_SRC = "/skylounge-map.html";
+const money = (cents: number) => "$" + (cents / 100).toFixed(2);
+const shortPrice = (cents: number) => "$" + (cents / 100).toFixed(cents % 100 === 0 ? 0 : 2);
 
-const GMAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-const STREETVIEW_IMG = GMAPS_KEY
-  ? `https://maps.googleapis.com/maps/api/streetview?size=800x450&location=${EVENT.lat},${EVENT.lng}&fov=80&pitch=5&source=outdoor&key=${GMAPS_KEY}`
-  : null;
+interface Player {
+  playVideo?: () => void;
+  stopVideo?: () => void;
+}
+
+type YouTubeWindow = Window & {
+  YT?: { Player: new (id: string, options: object) => Player };
+  onYouTubeIframeAPIReady?: () => void;
+};
+
+function Arrow({ size }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+/** The "A" with a heartbeat line through it. */
+function Mark({ height }: { height: number }) {
+  return (
+    <svg width={height * 1.2} height={height} viewBox="0 0 96 80" fill="none" aria-hidden="true">
+      <path d="M18 76 L48 8 L78 76" stroke="#fff" strokeWidth="9" strokeLinejoin="miter" />
+      <path d="M4 54 H36 L45 30 L55 68 L62 54 H92" stroke="#fb6904" strokeWidth="7" strokeLinejoin="miter" />
+    </svg>
+  );
+}
 
 export default function SkyloungeRooftopPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#0c0a08]" />}>
-      <SkyloungeRooftopCheckout />
+    <Suspense fallback={<div className="atl" />}>
+      <Checkout />
     </Suspense>
   );
 }
 
-function SkyloungeRooftopCheckout() {
-  const searchParams = useSearchParams();
-  const canceled = searchParams.get("canceled") === "1";
+function Checkout() {
+  const canceled = useSearchParams().get("canceled") === "1";
 
-  const [qty, setQty] = useState<Record<TierId, number>>({ earlybird: 0, ga: 0, vip: 0, founder: 0 });
-  // Live remaining-per-tier from the database; falls back to the static config if unavailable.
   const [live, setLive] = useState<Partial<Record<TierId, number>> | null>(null);
+  const [tierId, setTierId] = useState<TierId>("ga");
+  const [qty, setQty] = useState(1);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [guests, setGuests] = useState<string[]>([]);
+  const [optIn, setOptIn] = useState(true);
+  const [payMethod, setPayMethod] = useState("card");
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sticky, setSticky] = useState(false);
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [faqOpen, setFaqOpen] = useState<number | null>(null);
-  const [cartOpen, setCartOpen] = useState(false);
-  const [playing, setPlaying] = useState(false);
 
-  useEffect(() => {
-    document.body.style.overflow = cartOpen ? "hidden" : "";
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [cartOpen]);
+  const player = useRef<Player | null>(null);
+  const detailsRef = useRef<HTMLElement | null>(null);
+  const nameRef = useRef<HTMLInputElement | null>(null);
+  const emailRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -75,501 +99,413 @@ function SkyloungeRooftopCheckout() {
     return () => controller.abort();
   }, []);
 
-  const remainingFor = (tier: Tier): number => live?.[tier.id] ?? tierRemaining(tier);
-  const soldOutFor = (tier: Tier): boolean => tier.soldOut === true || remainingFor(tier) <= 0;
+  useEffect(() => {
+    const w = window as YouTubeWindow;
+    const create = () => {
+      if (player.current || !w.YT) return;
+      player.current = new w.YT.Player("yt-audio-player", {
+        videoId: VIDEO_ID,
+        playerVars: { start: VIDEO_START_SECONDS, autoplay: 0, controls: 0, rel: 0, playsinline: 1 },
+      });
+    };
+    if (w.YT) create();
+    else {
+      w.onYouTubeIframeAPIReady = create;
+      const script = document.createElement("script");
+      script.src = "https://www.youtube.com/iframe_api";
+      document.head.appendChild(script);
+    }
+  }, []);
 
-  const setTierQty = (id: TierId, next: number) => {
-    const tier = TIERS.find((t) => t.id === id)!;
-    const cap = Math.min(MAX_PER_TIER, remainingFor(tier));
-    const clamped = Math.max(0, Math.min(cap, next));
-    setQty((q) => ({ ...q, [id]: clamped }));
+  useEffect(() => {
+    const onScroll = () => {
+      const el = detailsRef.current;
+      if (el) setSticky(el.getBoundingClientRect().bottom < 0);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    document.body.style.overflow = sheetOpen ? "hidden" : "";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSheetOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [sheetOpen]);
+
+  const remainingFor = (tier: Tier) => live?.[tier.id] ?? tierRemaining(tier);
+  const openTiers = TIERS.filter((t) => !t.soldOut && remainingFor(t) > 0);
+  const totalLeft = openTiers.reduce((sum, t) => sum + remainingFor(t), 0);
+  const fromLabel = openTiers.length ? shortPrice(Math.min(...openTiers.map((t) => t.priceCents))) : null;
+
+  // Fall back to the first open tier if the selected one has sold out.
+  const selected = openTiers.find((t) => t.id === tierId) ?? openTiers[0] ?? null;
+  const maxQty = selected ? Math.min(MAX_PER_TIER, remainingFor(selected)) : 1;
+  const count = Math.max(1, Math.min(qty, maxQty));
+  const subtotal = selected ? selected.priceCents * count : 0;
+  const fee = selected ? computeFeeCents(subtotal, count) : 0;
+
+  const toggleMusic = () => {
+    const next = !playing;
+    setPlaying(next);
+    if (next) player.current?.playVideo?.();
+    else player.current?.stopVideo?.();
   };
 
-  const selected = useMemo(
-    () => TIERS.map((t) => ({ tier: t, count: qty[t.id] })).filter((row) => row.count > 0),
-    [qty]
-  );
-
-  const totalTickets = selected.reduce((sum, r) => sum + r.count, 0);
-  const subtotalCents = selected.reduce((sum, r) => sum + r.tier.priceCents * r.count, 0);
-  const feeCents = computeFeeCents(subtotalCents, totalTickets);
-  const grandTotalCents = subtotalCents + feeCents;
-  const openTiers = TIERS.filter((t) => !soldOutFor(t));
-  const fromLabel = openTiers.length ? formatPrice(Math.min(...openTiers.map((t) => t.priceCents))) : null;
-
-  const handleCheckout = async () => {
-    if (totalTickets === 0) return;
+  const pay = async () => {
+    if (!selected) return;
+    if (!name.trim()) return nameRef.current?.focus();
+    if (!emailRef.current?.checkValidity() || !email.trim()) return emailRef.current?.focus();
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/skylounge-rooftop/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: selected.map((r) => ({ id: r.tier.id, qty: r.count })) }),
+        body: JSON.stringify({
+          items: [{ id: selected.id, qty: count }],
+          email: email.trim(),
+          name: name.trim(),
+          guestNames: Array.from({ length: count - 1 }, (_, i) => (guests[i] ?? "").trim()),
+          newsletterOptIn: optIn,
+        }),
       });
       const data = await res.json();
-      if (!res.ok || !data.url) {
-        throw new Error(data.error || "Could not start checkout. Please try again.");
-      }
+      if (!res.ok || !data.url) throw new Error(data.error || "Please try again.");
       window.location.href = data.url;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
+      setError(err instanceof Error ? err.message : "Please try again.");
       setLoading(false);
     }
   };
 
+  const getTickets = (
+    <button className="btn-gold" type="button" onClick={() => setSheetOpen(true)} disabled={!fromLabel}>
+      <span>{fromLabel ? "Get Tickets" : "Sold Out"}</span>
+      <Arrow size={18} />
+    </button>
+  );
+
+  const scarcity = fromLabel ? `🔥 Only ${totalLeft} tickets left in total` : "Sold out";
+
   return (
-    <div className="min-h-screen bg-[#0c0a08] text-white">
-      {/* ===== HERO / COVER ===== */}
-      <section
-        className="relative overflow-hidden px-6 pt-28 pb-20 text-center"
-        style={{
-          background:
-            "radial-gradient(120% 90% at 50% 0%, #4a3826 0%, #2a2016 38%, #140f0a 72%, #0c0a08 100%)",
+    <div className="atl">
+      <div className="grain" />
+
+      <button className={`sticky-cta${sticky ? " show" : ""}`} type="button" onClick={() => setSheetOpen(true)}>
+        <span>Get Tickets</span>
+        {fromLabel && (
+          <>
+            <span className="dot">·</span>
+            <span>From {fromLabel}</span>
+          </>
+        )}
+      </button>
+
+      <main>
+        <header className="site-header">
+          <div className="brand">
+            <div className="brand-logo-atl" role="img" aria-label="Atlanta Pulse">
+              <Mark height={58} />
+              <span className="wordmark" aria-hidden="true">
+                ΛTLΛNTΛ <b>PULSE</b>
+              </span>
+            </div>
+          </div>
+          <div className="brand-underline" aria-hidden="true" />
+          <p className="tagline">
+            GOOD PEOPLE <span className="sep">•</span> GOOD VIBES <span className="sep">•</span> GOOD TIMES
+          </p>
+        </header>
+
+        <section className="hero">
+          <h1 className="hero-title">
+            <span className="line1">ALL WHITE</span>
+            <span className="line2">R&amp;B</span>
+            <span className="line3">
+              <em>ROOFTOP</em>
+            </span>
+          </h1>
+
+          <p className="badge">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 2l2.9 6.26L22 9.27l-5 4.87L18.2 21 12 17.56 5.8 21 7 14.14 2 9.27l7.1-1.01L12 2z" />
+            </svg>
+            ATLANTA&apos;S PREMIER R&amp;B EXPERIENCE
+          </p>
+
+          <p className="dj-line">
+            Music by <span className="gold">{EVENT.headliner || "Atlanta’s Top R&B DJ"}</span>
+          </p>
+          <p className="dj-sub">
+            CLASSICS <span className="sep">•</span> SLOW JAMS <span className="sep">•</span> NEW FLAVOR
+          </p>
+
+          <button className={`play-pill${playing ? " playing" : ""}`} type="button" aria-pressed={playing} onClick={toggleMusic}>
+            <span className="play-icon" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </span>
+            <span>{playing ? "Now playing…" : "Press play to set the mood"}</span>
+            <span className="eq" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+              <i />
+            </span>
+          </button>
+          <div className="yt-holder" aria-hidden="true">
+            <div id="yt-audio-player" />
+          </div>
+        </section>
+
+        {canceled && <p className="notice">Checkout canceled. No charge was made.</p>}
+
+        <section className="details" ref={detailsRef}>
+          <div className="info-card">
+            <p className="info-label">DATE</p>
+            <p className="info-value">{EVENT.dateLabel}</p>
+          </div>
+          <div className="info-card">
+            <p className="info-label">TIME</p>
+            <p className="info-value">{EVENT.timeLabel}</p>
+          </div>
+          <div className="info-card">
+            <p className="info-label">WHERE</p>
+            <p className="info-value">{EVENT.venue}</p>
+            <p className="info-sub">{EVENT.address}</p>
+          </div>
+          <div className="info-card">
+            <p className="info-label">ATTIRE</p>
+            <p className="info-value">{EVENT.dressCode}</p>
+            <p className="info-sub">Layer up — it&apos;s December in Atlanta</p>
+          </div>
+        </section>
+
+        <section className="cta-main">
+          {getTickets}
+          <p className="cta-caption">
+            {fromLabel ? `Starting at ${fromLabel}` : "Sold out"} <span className="dot">·</span> Instant e-tickets{" "}
+            <span className="dot">·</span> Apple / Google Pay
+          </p>
+          <p className="cta-caption scarcity">{scarcity}</p>
+        </section>
+
+        <hr className="divider" />
+
+        {VIP_SECTION.enabled && (
+          <>
+            <section className="vip-section">
+              <p className="eyebrow">FOR YOUR CREW</p>
+              <h2 className="vip-title">Reserve a VIP Section</h2>
+              <div className="vip-card">
+                <p className="vip-desc">{VIP_SECTION.description}</p>
+                <p className="vip-scarcity">{VIP_SECTION.scarcity}</p>
+                <div className="vip-contacts">
+                  {VIP_SECTION.contacts.map((c) => (
+                    <a key={c.phone} className="contact-btn" href={`sms:${c.phone}`}>
+                      {c.label}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </section>
+            <hr className="divider" />
+          </>
+        )}
+
+        <section className="location">
+          <p className="eyebrow">LOCATION</p>
+          <h2 className="loc-title">{EVENT.venue}</h2>
+          <p className="loc-address">{EVENT.address}</p>
+          <a className="maps-link" href={EVENT.mapsUrl} target="_blank" rel="noopener noreferrer">
+            Open in Google Maps
+            <Arrow size={15} />
+          </a>
+          <div className="map-preview">
+            <iframe
+              className="map-frame"
+              src="/skylounge-map.html"
+              title={`Map showing ${EVENT.venue} at ${EVENT.address}`}
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+              allowFullScreen
+            />
+          </div>
+        </section>
+
+        <hr className="divider" />
+
+        <section className="faq">
+          <p className="eyebrow">GOOD TO KNOW</p>
+          <h2 className="faq-title">Questions, answered</h2>
+          <div className="accordion">
+            {FAQ.map((item, i) => (
+              <div key={item.q} className={`acc-item${openFaq === i ? " open" : ""}`}>
+                <button className="acc-trigger" type="button" aria-expanded={openFaq === i} onClick={() => setOpenFaq(openFaq === i ? null : i)}>
+                  <span>{item.q}</span>
+                  <svg className="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </button>
+                <div className="acc-panel">
+                  <p>{item.a}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="cta-final">{getTickets}</section>
+
+        <footer className="site-footer">
+          <span className="back-link">
+            <Mark height={18} />
+            An event by Atlanta Pulse
+          </span>
+        </footer>
+      </main>
+
+      <div
+        className={`checkout-overlay${sheetOpen ? " open" : ""}`}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) setSheetOpen(false);
         }}
       >
-        <div
-          className="pointer-events-none absolute inset-x-0 top-0 h-[420px]"
-          style={{
-            background:
-              "radial-gradient(50% 60% at 50% 0%, rgba(212,175,55,0.18) 0%, rgba(212,175,55,0) 70%)",
-          }}
-        />
-
-        <div className="relative max-w-3xl mx-auto">
-
-          <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-            {EVENT.flyerImage ? (
-              <img
-                src={EVENT.flyerImage}
-                alt={`${EVENT.name} flyer`}
-                className="mx-auto mb-10 w-full max-w-sm rounded-2xl shadow-2xl shadow-black/60 border border-[#D4AF37]/20"
-              />
-            ) : null}
-
-            <p className="text-[#F0D488] text-[10px] sm:text-xs font-bold tracking-[0.35em] uppercase mb-6">
-              Good People <span className="text-[#D4AF37]">•</span> Good Vibes{" "}
-              <span className="text-[#D4AF37]">•</span> Good Times
-            </p>
-
-            <h1 className="leading-none">
-              <span style={DISPLAY} className="block text-white font-black uppercase tracking-tight text-6xl sm:text-7xl md:text-8xl">
-                All White
-              </span>
-              <span style={SCRIPT} className="block -mt-3 sm:-mt-4 mb-1 text-6xl sm:text-7xl md:text-8xl bg-gradient-to-b from-[#F6E3A8] via-[#D4AF37] to-[#A97B1E] bg-clip-text text-transparent">
-                R&amp;B
-              </span>
-            </h1>
-
-            <div className="flex items-center justify-center gap-4 mb-7">
-              <span className="h-px w-10 sm:w-16 bg-[#D4AF37]/60" />
-              <span className="font-heading text-sm sm:text-lg font-bold tracking-[0.55em] text-white/90 uppercase pl-[0.55em]">
-                Night
-              </span>
-              <span className="h-px w-10 sm:w-16 bg-[#D4AF37]/60" />
+        <div className="checkout-sheet" role="dialog" aria-modal="true" aria-label="Get your tickets" inert={!sheetOpen}>
+          <div className="sheet-handle" />
+          <div className="sheet-header">
+            <div className="sheet-heading">
+              <Mark height={16} />
+              <p className="sheet-eyebrow">ATLANTA PULSE · ALL WHITE R&amp;B ROOFTOP</p>
             </div>
-
-            <div className="inline-flex items-center gap-2 border border-[#D4AF37]/40 rounded-full px-4 py-1.5 mb-6">
-              <svg className="w-3.5 h-3.5 text-[#D4AF37]" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M10 1l2.6 5.3 5.9.9-4.3 4.1 1 5.8L10 14.8 4.8 17.2l1-5.8L1.5 7.2l5.9-.9L10 1z" />
-              </svg>
-              <span className="text-[#F0D488] text-[10px] font-bold tracking-[0.25em] uppercase">
-                Atlanta&apos;s Premier R&amp;B Experience
-              </span>
-            </div>
-
-            <p className="text-white/85 text-sm sm:text-base font-semibold tracking-wide mb-1">
-              Music by <span className="text-[#F0D488]">Atlanta&apos;s Top R&amp;B DJ</span>
-            </p>
-            <p className="text-white/45 text-[11px] tracking-[0.2em] uppercase mb-6">
-              Classics <span className="text-[#D4AF37]">•</span> Slow Jams{" "}
-              <span className="text-[#D4AF37]">•</span> New Flavor
-            </p>
-
-            {/* Press-play vibe — AUDIO ONLY */}
-            <div className="mb-9">
-              {playing ? (
-                <div className="inline-flex items-center gap-3 bg-white/[0.06] border border-[#D4AF37]/40 rounded-full pl-2 pr-2.5 py-2">
-                  <span className="w-9 h-9 rounded-full bg-gradient-to-r from-[#F0D488] to-[#D4AF37] flex items-center justify-center">
-                    <span className="flex items-end gap-[3px] h-4">
-                      <span className="awp-eq-bar" style={{ animationDelay: "0ms" }} />
-                      <span className="awp-eq-bar" style={{ animationDelay: "150ms" }} />
-                      <span className="awp-eq-bar" style={{ animationDelay: "300ms" }} />
-                      <span className="awp-eq-bar" style={{ animationDelay: "450ms" }} />
-                    </span>
-                  </span>
-                  <span className="text-white/85 text-sm font-semibold tracking-wide">Now playing</span>
-                  <button
-                    type="button"
-                    onClick={() => setPlaying(false)}
-                    aria-label="Stop the music"
-                    className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/80"
-                  >
-                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                      <rect x="5" y="5" width="14" height="14" rx="2" />
-                    </svg>
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setPlaying(true)}
-                  className="group inline-flex items-center gap-3 bg-white/[0.06] hover:bg-white/[0.1] border border-[#D4AF37]/40 rounded-full pl-2 pr-5 py-2 transition-colors"
-                >
-                  <span className="w-9 h-9 rounded-full bg-gradient-to-r from-[#F0D488] to-[#D4AF37] flex items-center justify-center text-[#1a1208] transition-transform group-hover:scale-105">
-                    <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
-                  </span>
-                  <span className="text-white/85 text-sm font-semibold tracking-wide">
-                    Press play to set the mood
-                  </span>
-                </button>
-              )}
-            </div>
-
-            {/* facts */}
-            <div className="grid sm:grid-cols-3 gap-3 max-w-2xl mx-auto mb-3">
-              {[
-                { label: "Date", value: EVENT.dateLabel },
-                { label: "Time", value: EVENT.timeLabel },
-                { label: "Where", value: EVENT.venue },
-              ].map((f) => (
-                <div key={f.label} className="bg-black/25 border border-[#D4AF37]/20 rounded-2xl px-5 py-4">
-                  <p className="text-[#D4AF37] text-[10px] font-bold tracking-[0.25em] uppercase mb-1">{f.label}</p>
-                  <p className="text-white text-sm font-semibold">{f.value}</p>
-                </div>
-              ))}
-            </div>
-            <a
-              href="#location"
-              className="inline-flex items-center gap-1.5 mb-9 text-white/55 hover:text-[#F0D488] text-xs transition-colors"
-            >
-              <span>📍</span>
-              <span>{EVENT.address}</span>
-            </a>
-
-            {/* PRIMARY CTA -> opens modal */}
-            <div>
-              <button
-                type="button"
-                onClick={() => setCartOpen(true)}
-                className="inline-flex items-center gap-2 bg-gradient-to-r from-[#F0D488] to-[#D4AF37] text-[#1a1208] font-black px-10 py-4 rounded-xl text-base tracking-wide transition-transform duration-200 hover:scale-[1.03] shadow-lg shadow-black/40"
-              >
-                Get Tickets
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7-7 7M21 12H3" />
-                </svg>
-              </button>
-              <p className="text-white/50 text-xs mt-3">
-                {fromLabel ? `Starting at ${fromLabel}` : "Sold out"} · Instant e-tickets · Apple&nbsp;/&nbsp;Google&nbsp;Pay
-              </p>
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-      {canceled && (
-        <div className="max-w-3xl mx-auto px-6 pt-6">
-          <div className="bg-amber-500/10 border border-amber-500/30 text-amber-200 text-sm rounded-xl px-4 py-3">
-            Checkout canceled. No charge was made. Tap "Get Tickets" whenever you&apos;re ready.
-          </div>
-        </div>
-      )}
-
-      {/* ===== LOCATION + MAP ===== */}
-      <section id="location" className="py-16 px-6 border-t border-white/10">
-        <div className="max-w-3xl mx-auto">
-          <div className="text-center mb-8">
-            <p className="text-[#D4AF37] text-xs font-bold tracking-[0.3em] uppercase mb-3">Location</p>
-            <h2 style={DISPLAY} className="text-3xl sm:text-4xl font-black">SkyLounge at The Glenn</h2>
-            <p className="text-white/55 text-sm mt-2">{EVENT.address}</p>
-            <a
-              href={EVENT.mapsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 mt-3 text-[#F0D488] hover:underline text-sm font-semibold"
-            >
-              Open in Google Maps
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7-7 7M21 12H3" />
-              </svg>
-            </a>
-          </div>
-
-          <div className={STREETVIEW_IMG ? "grid md:grid-cols-2 gap-4" : ""}>
-            {STREETVIEW_IMG && (
-              <div>
-                <p className="text-white/40 text-[10px] font-bold tracking-[0.25em] uppercase mb-2 text-center">
-                  Street View
-                </p>
-                <a
-                  href={EVENT.mapsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block rounded-2xl overflow-hidden border border-[#D4AF37]/25 shadow-xl shadow-black/40"
-                >
-                  <img
-                    src={STREETVIEW_IMG}
-                    alt="Street view of SkyLounge, Downtown Atlanta"
-                    className="w-full h-72 object-cover block"
-                  />
-                </a>
-              </div>
-            )}
-            <div>
-              {STREETVIEW_IMG && (
-                <p className="text-white/40 text-[10px] font-bold tracking-[0.25em] uppercase mb-2 text-center">
-                  Aerial
-                </p>
-              )}
-              <div className="rounded-2xl overflow-hidden border border-[#D4AF37]/25 shadow-xl shadow-black/40">
-                <iframe
-                  title="Map to SkyLounge, Downtown Atlanta"
-                  src={MAP_SRC}
-                  className={`w-full block ${STREETVIEW_IMG ? "h-72" : "h-80"}`}
-                  style={{ border: 0, filter: "saturate(1.1)" }}
-                  loading="lazy"
-                  referrerPolicy="no-referrer-when-downgrade"
-                  allowFullScreen
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ===== FAQ ===== */}
-      <section className="py-16 px-6 border-t border-white/10">
-        <div className="max-w-2xl mx-auto">
-          <div className="text-center mb-10">
-            <p className="text-[#D4AF37] text-xs font-bold tracking-[0.3em] uppercase mb-3">Good to know</p>
-            <h2 style={DISPLAY} className="text-3xl sm:text-4xl font-black">Questions, answered</h2>
-          </div>
-
-          <div className="space-y-3">
-            {FAQ.map((item, idx) => {
-              const open = faqOpen === idx;
-              return (
-                <div key={item.q} className="bg-[#15100b]/80 border border-[#D4AF37]/15 rounded-2xl overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setFaqOpen(open ? null : idx)}
-                    aria-expanded={open}
-                    className="w-full flex items-center justify-between gap-4 px-5 py-4 text-left"
-                  >
-                    <span className="font-semibold text-white text-sm sm:text-base">{item.q}</span>
-                    <svg className={`w-4 h-4 shrink-0 text-[#D4AF37] transition-transform ${open ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-                  {open && <p className="px-5 pb-5 -mt-1 text-white/55 text-sm leading-relaxed">{item.a}</p>}
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="text-center mt-10">
-            <button
-              type="button"
-              onClick={() => setCartOpen(true)}
-              className="inline-flex items-center gap-2 bg-gradient-to-r from-[#F0D488] to-[#D4AF37] text-[#1a1208] font-black px-8 py-4 rounded-xl text-sm tracking-wide transition-transform duration-200 hover:scale-[1.03]"
-            >
-              Get Tickets
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7-7 7M21 12H3" />
-              </svg>
+            <button className="sheet-close" type="button" aria-label="Close checkout" onClick={() => setSheetOpen(false)}>
+              ✕
             </button>
           </div>
-        </div>
-      </section>
+          <h3 className="sheet-title">Get your tickets</h3>
+          <p className="cta-caption scarcity">{scarcity}</p>
 
-      <div className="py-10 pb-28 lg:pb-10 px-6 border-t border-white/10 text-center">
-        <Link href="/" className="text-white/40 hover:text-white text-sm transition-colors">
-          ← Back home
-        </Link>
-      </div>
-
-      {/* Hidden audio-only player */}
-      {playing && (
-        <div aria-hidden="true" className="fixed top-0 -left-[9999px] w-80 h-44 opacity-0 pointer-events-none">
-          <iframe
-            src="https://www.youtube.com/embed/muPO1c6pxXg?start=99&autoplay=1&rel=0&list=RDmuPO1c6pxXg"
-            title="All White R&B Night vibe (audio)"
-            allow="autoplay; encrypted-media"
-            className="w-full h-full"
-          />
-        </div>
-      )}
-
-      {/* ===== STICKY GET-TICKETS BAR (mobile) ===== */}
-      <div className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-[#0c0a08]/95 backdrop-blur border-t border-[#D4AF37]/20 px-4 py-3">
-        <button
-          type="button"
-          onClick={() => setCartOpen(true)}
-          className="w-full bg-gradient-to-r from-[#F0D488] to-[#D4AF37] text-[#1a1208] font-black py-3.5 rounded-xl text-sm"
-        >
-          {fromLabel ? `Get Tickets · From ${fromLabel}` : "Sold out"}
-        </button>
-      </div>
-
-      {/* ===== TICKET MODAL ===== */}
-      {cartOpen && (
-        <div
-          className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-6"
-          onClick={() => setCartOpen(false)}
-        >
-          <motion.div
-            initial={{ y: 40, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 0.25 }}
-            onClick={(e) => e.stopPropagation()}
-            className="w-full sm:max-w-md bg-[#120d09] border border-[#D4AF37]/25 rounded-t-3xl sm:rounded-3xl max-h-[92vh] overflow-y-auto"
-          >
-            {/* modal header */}
-            <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 bg-[#120d09]/95 backdrop-blur border-b border-white/10">
-              <div>
-                <h3 style={DISPLAY} className="text-xl font-black leading-tight">Get Tickets</h3>
-                <p className="text-white/45 text-xs">{EVENT.name} · {EVENT.dateLabel}</p>
-              </div>
-              <button
-                type="button"
-                aria-label="Close"
-                onClick={() => setCartOpen(false)}
-                className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white text-lg"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="px-6 py-5 space-y-3">
+          <div className="sheet-body">
+            <div className="tier-list">
               {TIERS.map((tier) => {
-                const count = qty[tier.id];
-                const remaining = remainingFor(tier);
-                const soldOut = soldOutFor(tier);
-                const lowStock = remaining !== null && remaining > 0 && remaining <= LOW_STOCK_THRESHOLD;
-                const effectiveMax = remaining === null ? MAX_PER_TIER : Math.min(MAX_PER_TIER, remaining);
+                const soldOut = !openTiers.includes(tier);
+                const checked = selected?.id === tier.id;
                 return (
-                  <div
-                    key={tier.id}
-                    className={`rounded-2xl border p-4 transition-colors ${
-                      soldOut
-                        ? "border-white/10 bg-white/[0.02] opacity-60"
-                        : count > 0
-                        ? "border-[#D4AF37] bg-[#D4AF37]/[0.06]"
-                        : "border-white/10 bg-white/[0.03]"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h4
-                            style={DISPLAY}
-                            className={`font-black text-base ${tier.id === "vip" ? "gold-reflector" : "text-white"}`}
-                          >
-                            {tier.name}
-                          </h4>
-                          {tier.badge && (
-                            <span className="bg-gradient-to-r from-[#F0D488] to-[#D4AF37] text-[#1a1208] text-[9px] font-black tracking-wider uppercase px-2 py-0.5 rounded-full">
-                              {tier.badge}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[#F0D488] font-bold mt-0.5">{formatPrice(tier.priceCents)}</p>
-                        <p className="text-white/45 text-xs mt-1">{tier.blurb}</p>
-                        {lowStock && !soldOut && (
-                          <p className="text-[11px] font-bold mt-1.5 text-[#ff7a7a]">🔥 Only {remaining} left</p>
-                        )}
-                      </div>
-
-                      <div className="shrink-0">
-                        {soldOut ? (
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-white/40 border border-white/10 rounded-lg px-3 py-2">
-                            Sold Out
-                          </span>
-                        ) : (
-                          <div className="flex items-center gap-1.5 bg-white/[0.06] rounded-xl p-1">
-                            <button
-                              type="button"
-                              aria-label={`Remove one ${tier.name} ticket`}
-                              onClick={() => setTierQty(tier.id, count - 1)}
-                              disabled={count === 0}
-                              className="w-9 h-9 rounded-lg font-black text-xl flex items-center justify-center bg-white/10 text-white hover:bg-white/20 disabled:opacity-30"
-                            >
-                              −
-                            </button>
-                            <span style={DISPLAY} className="w-6 text-center font-black tabular-nums text-white">{count}</span>
-                            <button
-                              type="button"
-                              aria-label={`Add one ${tier.name} ticket`}
-                              onClick={() => setTierQty(tier.id, count + 1)}
-                              disabled={count >= effectiveMax}
-                              className="w-9 h-9 rounded-lg font-black text-xl flex items-center justify-center bg-gradient-to-r from-[#F0D488] to-[#D4AF37] text-[#1a1208] disabled:opacity-30"
-                            >
-                              +
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                  <label key={tier.id} className={`tier-option${soldOut ? " soldout" : ""}${checked ? " selected" : ""}`}>
+                    <input type="radio" name="tier" value={tier.id} checked={checked} disabled={soldOut} onChange={() => setTierId(tier.id)} />
+                    <span className="tier-radio" />
+                    <span className="tier-text">
+                      <span className="tier-name">{tier.name}</span>
+                      <span className="tier-tag">{soldOut ? "Sold out" : tier.tag}</span>
+                    </span>
+                    <span className="tier-price">{shortPrice(tier.priceCents)}</span>
+                  </label>
                 );
               })}
             </div>
 
-            {/* summary + checkout */}
-            <div className="px-6 pb-6">
-              {totalTickets > 0 && (
-                <div className="space-y-2 mb-4 text-sm border-t border-white/10 pt-4">
-                  <div className="flex justify-between">
-                    <span className="text-white/50">Subtotal</span>
-                    <span className="text-white/80 tabular-nums">{formatPrice(subtotalCents)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-white/50">{FEES.label}</span>
-                    <span className="text-white/80 tabular-nums">{formatPrice(feeCents)}</span>
-                  </div>
-                  <div className="flex justify-between items-baseline border-t border-white/10 pt-3 mt-1">
-                    <span className="text-white/60">Total ({totalTickets})</span>
-                    <span style={DISPLAY} className="font-black text-2xl text-[#F0D488] tabular-nums">
-                      {formatPrice(grandTotalCents)}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {error && (
-                <p className="text-red-300 bg-red-500/10 border border-red-500/30 text-xs rounded-lg px-3 py-2 mb-4">
-                  {error}
-                </p>
-              )}
-
-              <button
-                type="button"
-                onClick={handleCheckout}
-                disabled={totalTickets === 0 || loading}
-                className="w-full bg-gradient-to-r from-[#F0D488] to-[#D4AF37] disabled:opacity-40 text-[#1a1208] font-black py-4 rounded-xl text-sm transition-all duration-200 hover:scale-[1.01] disabled:hover:scale-100"
-              >
-                {loading ? "Redirecting to secure checkout…" : totalTickets === 0 ? "Select tickets" : "Checkout →"}
-              </button>
-
-              <div className="grid grid-cols-3 gap-2 mt-4 text-center">
-                {[
-                  { icon: "⚡", label: "Instant e-tickets" },
-                  { icon: "💳", label: "Apple / Google Pay" },
-                  { icon: "🔒", label: "Secure checkout" },
-                ].map((t) => (
-                  <div key={t.label} className="bg-white/[0.04] border border-white/10 rounded-lg py-2 px-1">
-                    <div className="text-base leading-none mb-1">{t.icon}</div>
-                    <p className="text-white/55 text-[10px] font-semibold leading-tight">{t.label}</p>
-                  </div>
-                ))}
+            <div className="qty-row">
+              <span className="qty-label">Quantity</span>
+              <div className="stepper">
+                <button className="step-btn" type="button" aria-label="Decrease quantity" disabled={count <= 1} onClick={() => setQty(count - 1)}>
+                  −
+                </button>
+                <span className="qty-value">{count}</span>
+                <button className="step-btn" type="button" aria-label="Increase quantity" disabled={count >= maxQty} onClick={() => setQty(count + 1)}>
+                  +
+                </button>
               </div>
-              <p className="text-[#D4AF37] text-xs text-center mt-3 font-semibold">{EVENT.dressCode}</p>
             </div>
-          </motion.div>
+
+            <div className="summary">
+              <div className="summary-row">
+                <span>Subtotal</span>
+                <span>{money(subtotal)}</span>
+              </div>
+              <div className="summary-row">
+                <span>{FEES.label}</span>
+                <span>{money(fee)}</span>
+              </div>
+              <div className="summary-row total">
+                <span>Total</span>
+                <span>{money(subtotal + fee)}</span>
+              </div>
+            </div>
+
+            {VIP_SECTION.enabled && (
+              <div className="vip-note">
+                <p>
+                  Hosting a crew of 8–12? Reserve a <strong>VIP Section</strong> for <strong>{VIP_SECTION.price} flat</strong> (bar tab included) — booked directly by text, not through this checkout.
+                </p>
+                <div className="vip-contacts compact">
+                  {VIP_SECTION.contacts.map((c) => (
+                    <a key={c.phone} className="contact-btn small" href={`sms:${c.phone}`}>
+                      {c.label}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <label className="field">
+              <span>Your name</span>
+              <input ref={nameRef} type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="First & last name" autoComplete="name" maxLength={40} />
+            </label>
+            {Array.from({ length: count - 1 }, (_, i) => (
+              <label key={i} className="field">
+                <span>Guest {i + 2} name (optional)</span>
+                <input
+                  type="text"
+                  value={guests[i] ?? ""}
+                  maxLength={40}
+                  autoComplete="off"
+                  placeholder={`Friend's name for ticket ${i + 2}`}
+                  onChange={(e) => {
+                    const next = [...guests];
+                    next[i] = e.target.value;
+                    setGuests(next);
+                  }}
+                />
+              </label>
+            ))}
+            <label className="field">
+              <span>Email for e-tickets</span>
+              <input ref={emailRef} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoComplete="email" inputMode="email" />
+            </label>
+            <label className="checkbox-field">
+              <input type="checkbox" checked={optIn} onChange={(e) => setOptIn(e.target.checked)} />
+              <span>Keep me posted about future Atlanta Pulse events</span>
+            </label>
+
+            <div className="pay-options">
+              {[
+                { id: "apple", label: " Pay" },
+                { id: "google", label: "G Pay" },
+                { id: "card", label: "Card" },
+              ].map((m) => (
+                <button key={m.id} type="button" className={`pay-btn ${m.id}${payMethod === m.id ? " selected" : ""}`} onClick={() => setPayMethod(m.id)}>
+                  {m.id === "apple" ? "Apple Pay" : m.id === "google" ? "Google Pay" : m.label}
+                </button>
+              ))}
+            </div>
+
+            {error && <p className="form-error">{error}</p>}
+
+            <button className="checkout-submit" type="button" disabled={!selected || loading} onClick={() => void pay()}>
+              {loading ? "Redirecting to secure checkout…" : selected ? `Pay ${money(subtotal + fee)}` : "Sold out"}
+            </button>
+            <p className="secure-note">Secure checkout · Instant e-tickets · No hidden fees</p>
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
