@@ -74,7 +74,7 @@ export function computeFeeCents(subtotalCents: number, ticketCount: number): num
 export const TIERS: Tier[] = [
   {
     id: "earlybird",
-    tag: "Lowest price of the night, first drink included. Once they're gone, they're gone.",
+    tag: "The lowest price of the night. Once they're gone, they're gone.",
     name: "Early Bird GA",
     priceCents: 3500,
     blurb: "Limited release. Same great night, lowest price. Once they're gone, they're gone.",
